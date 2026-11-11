@@ -22,10 +22,11 @@ import (
 	"fsx/internal/identity"
 	"fsx/internal/relay"
 	"fsx/internal/store"
+	"fsx/internal/tray"
 	"fsx/internal/transfer"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -77,6 +78,7 @@ func usage() {
   --accept-all         自动接收所有传输（谨慎）
   --force-relay        始终经由中继（对称 NAT 场景）
   --no-browser         不自动打开浏览器
+  --no-tray            关闭托盘客户端，保持命令行窗口（Windows）
 `)
 }
 
@@ -84,7 +86,7 @@ type commonOpts struct {
 	home, name, download, relay, relayFP string
 	p2p, http, disc                      int
 	noDiscovery, acceptAll, noBrowser    bool
-	forceRelay                           bool
+	forceRelay, noTray                   bool
 }
 
 func addCommon(fs *flag.FlagSet) *commonOpts {
@@ -101,6 +103,7 @@ func addCommon(fs *flag.FlagSet) *commonOpts {
 	fs.BoolVar(&o.acceptAll, "accept-all", false, "自动接收所有传输")
 	fs.BoolVar(&o.noBrowser, "no-browser", false, "不打开浏览器")
 	fs.BoolVar(&o.forceRelay, "force-relay", false, "始终经由中继传输")
+	fs.BoolVar(&o.noTray, "no-tray", false, "关闭托盘客户端")
 	return o
 }
 
@@ -182,25 +185,49 @@ func cmdServe(args []string) {
 	fs.Parse(args)
 
 	home := o.homeDir()
+	useTray := tray.Supported() && !o.noTray
+	if useTray {
+		tray.HideConsole()
+		if closeLog, err := tray.SetupLog(home); err == nil {
+			defer closeLog()
+		}
+	}
+	fatal := func(format string, a ...any) {
+		msg := fmt.Sprintf(format, a...)
+		log.Print(msg)
+		if useTray {
+			tray.Error("fsx 启动失败", msg)
+		}
+		os.Exit(1)
+	}
+
 	id, err := identity.Load(home)
 	if err != nil {
-		log.Fatalf("读取身份失败: %v", err)
+		fatal("读取身份失败: %v", err)
 	}
 	st, err := store.Open(home, store.Config{
 		Name: hostname(), DownloadDir: defaultDownload(),
 		HTTPPort: 9271, P2PPort: 9272, DiscPort: 9273,
 	})
 	if err != nil {
-		log.Fatalf("读取配置失败: %v", err)
+		fatal("读取配置失败: %v", err)
 	}
 	cfg := applyOpts(st, o)
+
+	// 托盘模式下重复双击 exe：直接把已在运行的节点控制台打开
+	if useTray {
+		if port, ok := runningInstance(cfg.HTTPPort); ok {
+			openBrowser(fmt.Sprintf("http://127.0.0.1:%d", port))
+			return
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	ln, p2pPort, err := listenPort(cfg.P2PPort)
 	if err != nil {
-		log.Fatalf("P2P 端口不可用: %v", err)
+		fatal("P2P 端口不可用: %v", err)
 	}
 	if p2pPort != cfg.P2PPort {
 		cfg.P2PPort = p2pPort
@@ -236,7 +263,7 @@ func cmdServe(args []string) {
 	code := pairCode()
 	httpLn, httpPort, err := listenPort(cfg.HTTPPort)
 	if err != nil {
-		log.Fatalf("控制台端口不可用: %v", err)
+		fatal("控制台端口不可用: %v", err)
 	}
 	if httpPort != cfg.HTTPPort {
 		cfg.HTTPPort = httpPort
@@ -266,11 +293,28 @@ func cmdServe(args []string) {
 	}
 	fmt.Printf("  接收目录   %s\n\n", cfg.DownloadDir)
 
-	if !o.noBrowser {
-		openBrowser(fmt.Sprintf("http://127.0.0.1:%d", httpPort))
+	url := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
+	if useTray {
+		log.Printf("已启动 · 节点 %s · 控制台 %s · 配对码 %s", identity.Short(id.ID), url, code)
+		go func() {
+			<-ctx.Done()
+			tray.Quit()
+		}()
+		if err := tray.Run(tray.Options{
+			Name: cfg.Name, URL: url, PairCode: code, NodeID: id.ID,
+		}); err != nil {
+			log.Printf("托盘客户端退出: %v", err)
+			tray.ShowConsole()
+			openBrowser(url)
+			<-ctx.Done()
+		}
+		stop()
+	} else {
+		if !o.noBrowser {
+			openBrowser(url)
+		}
+		<-ctx.Done()
 	}
-
-	<-ctx.Done()
 	log.Println("正在退出…")
 	shctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -497,6 +541,23 @@ func listenPort(base int) (net.Listener, int, error) {
 		lastErr = err
 	}
 	return nil, 0, lastErr
+}
+
+// runningInstance 在候选端口里找已在运行的 fsx 控制台，返回其端口。
+func runningInstance(base int) (int, bool) {
+	c := &http.Client{Timeout: 800 * time.Millisecond}
+	for port := base; port < base+5; port++ {
+		resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/api/state", port))
+		if err != nil {
+			continue
+		}
+		ok := resp.Header.Get("X-FSX-Server") == "fsx"
+		resp.Body.Close()
+		if ok {
+			return port, true
+		}
+	}
+	return 0, false
 }
 
 func lanIP() string {

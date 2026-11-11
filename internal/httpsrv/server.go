@@ -56,7 +56,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/upload", s.guard(s.upload))
 	mux.Handle("GET /dl/{id}", s.guard(s.download))
 	mux.Handle("GET /api/history", s.guard(s.history))
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-FSX-Server", "fsx")
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
