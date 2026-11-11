@@ -94,6 +94,8 @@ main{max-width:1280px;margin:0 auto;padding:16px 20px 48px;display:grid;grid-tem
 .msg .who{font-size:10px;color:var(--muted);margin-bottom:2px}
 .empty{color:var(--muted);font-size:12px;padding:8px 2px}
 
+[hidden]{display:none !important}
+
 .drop{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(5,8,14,.72);backdrop-filter:blur(4px)}
 .drop-inner{border:2px dashed var(--accent);border-radius:18px;padding:36px 52px;background:rgba(18,21,28,.92);font-size:15px}
 .modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;background:rgba(5,8,14,.72)}
