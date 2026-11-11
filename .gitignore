@@ -1,0 +1,5 @@
+/fsx
+/fsx.exe
+/dist/
+*.log
+*_test_bin

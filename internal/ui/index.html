@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>fsx · 文件传送</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo">fsx</div>
+    <div>
+      <div class="me-name" id="meName">—</div>
+      <div class="me-id" id="meID"></div>
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="pill" id="relayPill">中继 未配置</span>
+    <span class="pill code" id="codePill" hidden>配对码 <b id="pairCode"></b></span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>节点</h2>
+      <span class="count" id="peerCount">0</span>
+    </div>
+    <div id="peers" class="list"></div>
+    <div class="manual">
+      <input id="manualAddr" placeholder="手动添加 IP:端口" autocomplete="off">
+      <button id="addPeer" class="btn ghost">添加</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>传输</h2>
+      <span class="count" id="jobCount">0</span>
+    </div>
+    <div id="jobs" class="list"></div>
+
+    <div class="panel-head sub">
+      <h2>收到的文件</h2>
+    </div>
+    <div id="inbox" class="list"></div>
+
+    <div class="panel-head sub">
+      <h2>消息</h2>
+    </div>
+    <div id="msgs" class="list msgs"></div>
+  </section>
+</main>
+
+<div id="drop" class="drop" hidden>
+  <div class="drop-inner">松手后选择接收节点</div>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<input type="file" id="fileInput" multiple hidden>
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
