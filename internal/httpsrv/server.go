@@ -314,19 +314,32 @@ func (s *Server) cancel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) addPeer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Addr string `json:"addr"`
+		ID   string `json:"id"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, 400, errBody(err))
 		return
 	}
-	addr := strings.TrimSpace(req.Addr)
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil || host == "" || port == "" {
-		writeJSON(w, 400, errBody(fmt.Errorf("地址格式应为 IP:端口")))
+	target := strings.TrimSpace(req.ID)
+	if target == "" {
+		target = strings.TrimSpace(req.Addr)
+	}
+	pid, addr, name, err := s.m.Resolve(target)
+	if err != nil {
+		writeJSON(w, 400, errBody(err))
 		return
 	}
-	s.m.AddManual(net.JoinHostPort(host, port))
-	writeJSON(w, 200, map[string]bool{"ok": true})
+	if pid == "" {
+		host, port, e := net.SplitHostPort(addr)
+		if e != nil || host == "" || port == "" {
+			writeJSON(w, 400, errBody(fmt.Errorf("地址格式应为 IP:端口")))
+			return
+		}
+		s.m.AddManual(net.JoinHostPort(host, port))
+	} else {
+		s.m.AddPeer(pid, name, addr)
+	}
+	writeJSON(w, 200, map[string]string{"id": pid, "addr": addr, "name": name})
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {

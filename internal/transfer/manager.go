@@ -15,6 +15,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ var errCanceled = errors.New("已取消")
 type WAN interface {
 	PublicAddr(peerID string) (string, bool)
 	OpenRelay(ctx context.Context, peerID string) (net.Conn, error)
+	Resolve(id string) (peerID, name, direct string, ok bool)
 	Status() string
 }
 
@@ -135,6 +137,32 @@ func New(self *identity.Identity, reg *discovery.Registry, st *store.Store, wan 
 func (m *Manager) Self() *identity.Identity { return m.self }
 
 func (m *Manager) AddManual(addr string) { m.reg.AddManual(addr) }
+
+func (m *Manager) AddPeer(id, name, addr string) { m.reg.AddPeer(id, name, addr) }
+
+// Resolve 把「IP:端口」「节点 ID（可只用前 8 位）」或节点名解析成可达目标。
+// ID 先查局域网发现，查不到再问中继；两者都没有则无法定位。
+func (m *Manager) Resolve(q string) (peerID, addr, name string, err error) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return "", "", "", errors.New("请输入节点 ID 或 IP:端口")
+	}
+	if host, port, e := net.SplitHostPort(q); e == nil && host != "" && port != "" {
+		return "", q, "", nil
+	}
+	if p := m.reg.Find(q); p != nil {
+		return p.ID, p.Addr, p.Name, nil
+	}
+	if m.wan != nil {
+		if pid, nm, direct, ok := m.wan.Resolve(q); ok {
+			return pid, direct, nm, nil
+		}
+	}
+	if m.wan == nil {
+		return "", "", "", fmt.Errorf("没找到节点 %q：不在同一局域网且未配置中继，也可以直接填 IP:端口", q)
+	}
+	return "", "", "", fmt.Errorf("没找到节点 %q：请确认对方在线并已连接同一中继", q)
+}
 
 func (m *Manager) SetAcceptAll(v bool) {
 	m.mu.Lock()

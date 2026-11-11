@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,9 +64,70 @@ func linkLocal(addr string) bool {
 	return ip != nil && (ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast())
 }
 
+// Find 按完整/前缀 ID 或名称查找在线节点；前缀有多个匹配时不返回。
+func (r *Registry) Find(q string) *Peer {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return nil
+	}
+	low := strings.ToLower(q)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	var hit *Peer
+	n := 0
+	for _, p := range r.peers {
+		if p.ID == "" {
+			continue
+		}
+		if now.Sub(time.Unix(p.LastSeen, 0)) >= peerTimeout && !p.Manual {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(p.ID), low) || strings.EqualFold(p.Name, q) {
+			c := *p
+			c.Online = true
+			if strings.EqualFold(p.ID, low) || strings.EqualFold(p.Name, q) {
+				return &c
+			}
+			hit = &c
+			n++
+		}
+	}
+	if n == 1 {
+		return hit
+	}
+	return nil
+}
+
+// AddPeer 记录一个已解析出身份的节点（例如通过中继查到），重启前一直保留。
+func (r *Registry) AddPeer(id, name, addr string) {
+	if id == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.peers[id]
+	if !ok {
+		p = &Peer{ID: id}
+		r.peers[id] = p
+	}
+	p.Name = name
+	if addr != "" {
+		p.Addr = addr
+	}
+	p.Manual = true
+	p.Online = true
+	p.LastSeen = time.Now().Unix()
+}
+
 func (r *Registry) AddManual(addr string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, p := range r.peers {
+		if p.Addr == addr {
+			return
+		}
+	}
 	key := "manual:" + addr
 	if _, ok := r.peers[key]; !ok {
 		r.peers[key] = &Peer{Addr: addr, Online: true, Manual: true, Name: addr, LastSeen: time.Now().Unix()}

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,10 +111,25 @@ func (s *Server) handle(raw net.Conn) {
 			json.Unmarshal(b, &lk)
 			s.mu.Lock()
 			target := s.clients[lk.ID]
+			if target == nil && lk.ID != "" {
+				// 允许用短 ID 前缀查询，只有唯一匹配时才返回。
+				q := strings.ToLower(lk.ID)
+				var hit *sclient
+				n := 0
+				for id, c := range s.clients {
+					if strings.HasPrefix(strings.ToLower(id), q) {
+						hit = c
+						n++
+					}
+				}
+				if n == 1 {
+					target = hit
+				}
+			}
 			var f Found
 			if target != nil {
 				thost, _, _ := net.SplitHostPort(target.addr)
-				f = Found{ID: target.id, Name: target.name}
+				f = Found{ID: target.id, Name: target.name, Q: lk.ID}
 				if target.port > 0 {
 					f.Direct = net.JoinHostPort(thost, strconv.Itoa(target.port))
 				}
@@ -122,7 +138,7 @@ func (s *Server) handle(raw net.Conn) {
 			if f.ID != "" {
 				pc.SendJSON(RFound, f)
 			} else {
-				pc.SendJSON(RNotFound, Found{ID: lk.ID})
+				pc.SendJSON(RNotFound, Found{ID: lk.ID, Q: lk.ID})
 			}
 
 		case ROpen:

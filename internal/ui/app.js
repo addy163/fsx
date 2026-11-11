@@ -63,6 +63,13 @@ function render() {
   const self = S.self || {};
   $("#meName").textContent = self.name || "—";
   $("#meID").textContent = self.id ? "ID " + (self.short || shortID(self.id)) : "";
+  $("#meID").onclick = () => {
+    if (!self.id) return;
+    navigator.clipboard.writeText(self.id).then(
+      () => toast("已复制完整节点 ID，可发给对方"),
+      () => toast("复制失败，请手动选择")
+    );
+  };
   const rp = $("#relayPill");
   const relayText = { online: "中继 已连接", connecting: "中继 连接中", offline: "中继 离线", off: "中继 未配置" };
   rp.textContent = relayText[S.relay] || ("中继 " + S.relay);
@@ -85,7 +92,7 @@ function renderPeers() {
   const peers = S.peers || [];
   $("#peerCount").textContent = peers.length;
   if (!peers.length) {
-    box.append(elem("div", "empty", "等待节点上线，或手动添加 IP:端口"));
+    box.append(elem("div", "empty", "等待节点上线，或在下方输入节点 ID 添加"));
     return;
   }
   for (const p of peers) {
@@ -93,8 +100,7 @@ function renderPeers() {
     card.append(elem("span", "dot" + (p.online ? " on" : "")));
     const info = elem("div", "peer-info");
     info.append(elem("div", "peer-name", p.name || p.id || p.addr));
-    const sub = p.manual ? p.addr
-      : (p.id ? shortID(p.id) + (p.addr ? " · " + p.addr : "") : p.addr);
+    const sub = p.id ? shortID(p.id) + (p.addr ? " · " + p.addr : " · 中继") : p.addr;
     info.append(elem("div", "peer-sub", sub || ""));
     card.append(info);
     const acts = elem("div", "peer-actions");
@@ -394,12 +400,13 @@ document.addEventListener("drop", (e) => {
 });
 
 $("#addPeer").onclick = async () => {
-  const addr = $("#manualAddr").value.trim();
-  if (!addr) return;
+  const v = $("#manualAddr").value.trim();
+  if (!v) return;
   try {
-    await api("/api/peer", { addr });
+    const body = v.includes(":") ? { addr: v } : { id: v };
+    const r = await api("/api/peer", body);
     $("#manualAddr").value = "";
-    toast("已添加");
+    toast(r && r.name ? "已找到 " + r.name : "已添加");
   } catch (e) { fail(e); }
 };
 $("#manualAddr").addEventListener("keydown", (e) => {

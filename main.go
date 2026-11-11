@@ -324,6 +324,9 @@ func cmdSend(args []string) {
 		go discovery.Run(ctx, cfg.DiscPort, id.ID, cfg.Name, cfg.P2PPort, reg)
 	}
 
+	mgr := transfer.New(id, reg, st, wan, cfg.P2PPort)
+	mgr.SetForceRelay(o.forceRelay)
+
 	var peerID, addr string
 	if strings.Contains(peerArg, ":") {
 		addr = peerArg
@@ -332,8 +335,8 @@ func cmdSend(args []string) {
 		fmt.Print("扫描节点")
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) {
-			if pid, a := resolvePeer(reg, peerArg); a != "" {
-				peerID, addr = pid, a
+			if p := reg.Find(peerArg); p != nil && p.Addr != "" {
+				peerID, addr = p.ID, p.Addr
 				break
 			}
 			fmt.Print(".")
@@ -341,21 +344,16 @@ func cmdSend(args []string) {
 		}
 		fmt.Print("\r")
 		if addr == "" {
-			if wan != nil && isPeerID(peerArg) {
-				peerID = strings.ToLower(peerArg)
+			if pid, ad, _, err := mgr.Resolve(peerArg); err == nil {
+				peerID, addr = pid, ad
 				fmt.Printf("局域网内未发现，改走中继连接 %s\n", identity.Short(peerID))
-			} else if wan != nil {
-				fmt.Fprintf(os.Stderr, "没找到节点 %q；跨网发送请填写完整节点 ID（32 位十六进制）或 IP:端口\n", peerArg)
-				os.Exit(1)
 			} else {
-				fmt.Fprintf(os.Stderr, "没找到节点 %q；请确认对方在线，或直接写 IP:端口\n", peerArg)
+				fmt.Fprintf(os.Stderr, "%v\n", err)
 				os.Exit(1)
 			}
 		}
 	}
 
-	mgr := transfer.New(id, reg, st, wan, cfg.P2PPort)
-	mgr.SetForceRelay(o.forceRelay)
 	jobID, err := mgr.SendTo(peerID, addr, rest, nil)
 	if err != nil {
 		log.Fatalf("发送失败: %v", err)
@@ -486,33 +484,6 @@ func portOf(addr string) string {
 		return "9270"
 	}
 	return p
-}
-
-func isPeerID(s string) bool {
-	if len(s) != 32 {
-		return false
-	}
-	for _, c := range s {
-		if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
-			return false
-		}
-	}
-	return true
-}
-
-func resolvePeer(reg *discovery.Registry, want string) (string, string) {
-	want = strings.TrimSpace(want)
-	low := strings.ToLower(want)
-	for _, p := range reg.List() {
-		if p.Addr == "" {
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(p.ID), low) ||
-			strings.EqualFold(p.Name, want) {
-			return p.ID, p.Addr
-		}
-	}
-	return "", ""
 }
 
 func listenPort(base int) (net.Listener, int, error) {

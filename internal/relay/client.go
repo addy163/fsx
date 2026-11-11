@@ -54,6 +54,7 @@ type Found struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Direct string `json:"direct"`
+	Q      string `json:"q,omitempty"` // 原始查询串，短 ID 查询时用于回调匹配
 }
 
 type Open struct {
@@ -314,8 +315,12 @@ func (c *Client) readLoop() {
 				f.Direct = ""
 			}
 			c.mu.Lock()
-			ch := c.lookups[f.ID]
-			delete(c.lookups, f.ID)
+			key := f.ID
+			if f.Q != "" {
+				key = f.Q
+			}
+			ch := c.lookups[key]
+			delete(c.lookups, key)
 			if t == RFound && f.Direct != "" {
 				c.cache[f.ID] = cached{info: f, at: time.Now()}
 			}
@@ -389,45 +394,67 @@ func (c *Client) teardown() {
 	}
 }
 
-// PublicAddr 返回对方的直连提示地址（公网 IP + 对方 P2P 端口）。
-// 对方在 NAT 后面时会连不通，由调用方回落到中继转发。
-func (c *Client) PublicAddr(peerID string) (string, bool) {
-	c.mu.Lock()
-	if e, ok := c.cache[peerID]; ok && time.Since(e.at) < 20*time.Second && e.info.Direct != "" {
-		c.mu.Unlock()
-		return e.info.Direct, true
+// Lookup 向中继查询节点，id 可以是完整 ID 或唯一前缀。
+func (c *Client) Lookup(id string) (Found, bool) {
+	if id == "" {
+		return Found{}, false
 	}
-	pc := c.pc
+	c.mu.Lock()
+	if e, ok := c.cache[id]; ok && time.Since(e.at) < 20*time.Second {
+		c.mu.Unlock()
+		return e.info, true
+	}
 	c.mu.Unlock()
-	if pc == nil {
-		var err error
-		pc, err = c.waitConn(context.Background(), 3*time.Second)
-		if err != nil {
-			return "", false
-		}
+	pc, err := c.waitConn(context.Background(), 3*time.Second)
+	if err != nil {
+		return Found{}, false
 	}
 	c.mu.Lock()
 	ch := make(chan Found, 1)
-	c.lookups[peerID] = ch
+	c.lookups[id] = ch
 	c.mu.Unlock()
-	if err := pc.SendJSON(RLookup, Lookup{ID: peerID}); err != nil {
+	if err := pc.SendJSON(RLookup, Lookup{ID: id}); err != nil {
 		c.mu.Lock()
-		delete(c.lookups, peerID)
+		delete(c.lookups, id)
 		c.mu.Unlock()
-		return "", false
+		return Found{}, false
 	}
 	select {
 	case f := <-ch:
-		if f.Direct == "" {
-			return "", false
+		if f.ID == "" {
+			return Found{}, false
 		}
-		return f.Direct, true
+		if f.Direct != "" {
+			c.mu.Lock()
+			c.cache[f.ID] = cached{info: f, at: time.Now()}
+			c.mu.Unlock()
+		}
+		return f, true
 	case <-time.After(4 * time.Second):
 		c.mu.Lock()
-		delete(c.lookups, peerID)
+		delete(c.lookups, id)
 		c.mu.Unlock()
+		return Found{}, false
+	}
+}
+
+// Resolve 通过中继把完整/前缀 ID 解析成节点身份与直连提示。
+func (c *Client) Resolve(id string) (peerID, name, direct string, ok bool) {
+	f, ok := c.Lookup(id)
+	if !ok {
+		return "", "", "", false
+	}
+	return f.ID, f.Name, f.Direct, true
+}
+
+// PublicAddr 返回对方的直连提示地址（公网 IP + 对方 P2P 端口）。
+// 对方在 NAT 后面时会连不通，由调用方回落到中继转发。
+func (c *Client) PublicAddr(peerID string) (string, bool) {
+	f, ok := c.Lookup(peerID)
+	if !ok || f.Direct == "" {
 		return "", false
 	}
+	return f.Direct, true
 }
 
 func (c *Client) waitConn(ctx context.Context, d time.Duration) (*proto.Conn, error) {
