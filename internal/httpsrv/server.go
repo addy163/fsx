@@ -97,35 +97,68 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
-	errMsg := ""
+	errHTML := ""
 	if r.URL.Query().Get("e") == "1" {
-		errMsg = "配对码不正确"
+		errHTML = `<div class="err">配对码不正确，请看运行 fsx 那台电脑的托盘菜单</div>`
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+	w.Header().Set("Cache-Control", "no-cache")
+	fmt.Fprintf(w, loginHTML, errHTML)
+}
+
+const loginHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07090D"><meta name="color-scheme" content="dark">
 <title>fsx · 配对</title>
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d12;color:#e8edf5;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
-.card{width:340px;max-width:calc(100vw - 32px);padding:28px;border:1px solid #1e2430;background:#12151c;border-radius:16px}
-.logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#4c8dff,#2ee6a8);display:grid;place-items:center;font-weight:800;color:#08111f;letter-spacing:-.5px;margin-bottom:18px}
-h1{font-size:17px;margin:0 0 6px}p{color:#8b97ab;font-size:13px;margin:0 0 20px}
-input{width:100%%;padding:11px 12px;border-radius:9px;border:1px solid #262e3d;background:#0b0d12;color:#e8edf5;font-size:18px;letter-spacing:6px;text-align:center;outline:none}
-input:focus{border-color:#4c8dff}
-button{width:100%%;margin-top:12px;padding:11px;border:0;border-radius:9px;background:#4c8dff;color:#06101f;font-weight:600;font-size:14px;cursor:pointer}
-.err{color:#ff8a8a;font-size:13px;margin-top:12px;text-align:center}
-</style></head><body><form class="card" method="post" action="/api/login">
-<div class="logo">fsx</div><h1>输入配对码</h1>
-<p>配对码显示在运行 fsx 的那台电脑的控制台上。</p>
-<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" autofocus>
-<button type="submit">连接</button>%s</form></body></html>`,
-		func() string {
-			if errMsg != "" {
-				return `<div class="err">` + errMsg + `</div>`
-			}
-			return ""
-		}())
-}
+*{box-sizing:border-box}
+html,body{height:100%%}
+body{margin:0;display:grid;place-items:center;background:#07090D;color:#E9EFF8;overflow:hidden;
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.bg{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.bg i{position:absolute;border-radius:50%%;filter:blur(80px);opacity:.55}
+.bg i:first-child{width:60vw;height:60vw;left:-18vw;top:-26vw;background:radial-gradient(circle,rgba(76,141,255,.55),transparent 66%%);animation:d1 30s ease-in-out infinite}
+.bg i:last-child{width:48vw;height:48vw;right:-16vw;bottom:-22vw;background:radial-gradient(circle,rgba(46,230,168,.34),transparent 66%%);animation:d2 38s ease-in-out infinite}
+.bg u{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(110%% 80%% at 50%% 0%%,#000 20%%,transparent 76%%);mask-image:radial-gradient(110%% 80%% at 50%% 0%%,#000 20%%,transparent 76%%)}
+@keyframes d1{0%%,100%%{transform:translate(0,0) scale(1)}50%%{transform:translate(5vw,4vh) scale(1.1)}}
+@keyframes d2{0%%,100%%{transform:translate(0,0) scale(1.05)}50%%{transform:translate(-4vw,-4vh) scale(.95)}}
+.card{position:relative;width:372px;max-width:calc(100vw - 28px);padding:28px;border:1px solid #28344A;border-radius:20px;
+  background:linear-gradient(180deg,#131822,#0A0D13);box-shadow:0 40px 100px -50px #000,0 1px 0 rgba(255,255,255,.04) inset;
+  animation:up .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.mark{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#4C8DFF,#2EE6A8);box-shadow:0 8px 22px -10px rgba(76,141,255,.95)}
+.mark svg{width:21px;height:21px;fill:#06121C}
+.word{font-size:19px;font-weight:700;letter-spacing:.02em;color:#F0E2CE}
+.tag{margin-left:auto;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7E8EA6}
+h1{font-size:18px;margin:0 0 6px;letter-spacing:-.01em}
+p{color:#A9B7CB;font-size:12.5px;margin:0 0 20px}
+input{width:100%%;padding:14px 12px;border-radius:12px;border:1px solid #28344A;background:#07090D;color:#fff;
+  font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:26px;font-weight:600;letter-spacing:.3em;text-indent:.3em;text-align:center;outline:none;transition:.18s}
+input::placeholder{color:#39445A;letter-spacing:.3em}
+input:focus{border-color:rgba(76,141,255,.7);box-shadow:0 0 0 3px rgba(76,141,255,.22)}
+button{width:100%%;margin-top:14px;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#4C8DFF,#2EE6A8);
+  color:#05121C;font-weight:700;font-size:14px;cursor:pointer;transition:.16s;box-shadow:0 12px 30px -16px rgba(76,141,255,1)}
+button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+button:active{transform:none}
+.foot{display:flex;align-items:center;gap:7px;margin-top:18px;padding-top:14px;border-top:1px solid #1C2432;color:#7E8EA6;font-size:11px}
+.foot svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.err{margin-top:14px;padding:9px 11px;border:1px solid rgba(255,107,129,.4);border-radius:10px;background:rgba(255,107,129,.1);color:#FF6B81;font-size:12px;text-align:center}
+</style></head><body>
+<div class="bg"><i></i><i></i><u></u></div>
+<form class="card" method="post" action="/api/login">
+  <div class="brand">
+    <span class="mark"><svg viewBox="0 0 32 32"><path d="M16 7l8 9h-5v9h-6v-9H8z"/></svg></span>
+    <span class="word">fsx</span><span class="tag">pair</span>
+  </div>
+  <h1>输入配对码</h1>
+  <p>配对码在那台电脑的 fsx 托盘菜单里，本机控制台首页也会显示。</p>
+  <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" autofocus aria-label="配对码">
+  <button type="submit">连接节点</button>
+  %s
+  <div class="foot"><svg viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>配对后本机记住此设备 30 天</div>
+</form></body></html>`
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
@@ -169,6 +202,19 @@ func isLoopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// localIP 给配对提示用：UDP dial 不发包，只让内核选出出口网卡地址。
+func localIP() string {
+	c, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer c.Close()
+	if a, ok := c.LocalAddr().(*net.UDPAddr); ok && a.IP != nil && !a.IP.IsLoopback() {
+		return a.IP.String()
+	}
+	return ""
+}
+
 func (s *Server) guard(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.authed(r) {
@@ -189,7 +235,7 @@ func (s *Server) buildState(r *http.Request) map[string]any {
 	self := map[string]any{
 		"id": s.id.ID, "short": identity.Short(s.id.ID), "name": cfg.Name,
 		"version": s.version, "http_port": s.http, "p2p_port": s.p2p,
-		"download_dir": cfg.DownloadDir,
+		"download_dir": cfg.DownloadDir, "lan": localIP(),
 	}
 	out := map[string]any{
 		"self": self, "peers": snap.Peers, "jobs": snap.Jobs,

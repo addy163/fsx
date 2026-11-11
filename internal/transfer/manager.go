@@ -54,6 +54,8 @@ type Item struct {
 type Message struct {
 	FromID   string `json:"from_id"`
 	FromName string `json:"from_name"`
+	ToID     string `json:"to_id,omitempty"`
+	ToName   string `json:"to_name,omitempty"`
 	Body     string `json:"body"`
 	Time     int64  `json:"time"`
 	Dir      string `json:"dir"`
@@ -572,7 +574,14 @@ func (m *Manager) SendText(peerID, addr, body string) error {
 		return errors.New(res.Err)
 	}
 	m.mu.Lock()
-	m.msgs = append(m.msgs, Message{FromID: m.self.ID, FromName: m.st.Config().Name, Body: body, Time: time.Now().Unix(), Dir: "out"})
+	m.msgs = append(m.msgs, Message{
+		FromID: m.self.ID, FromName: m.st.Config().Name,
+		ToID: s.peerID, ToName: s.name,
+		Body: body, Time: time.Now().Unix(), Dir: "out",
+	})
+	if len(m.msgs) > 200 {
+		m.msgs = m.msgs[len(m.msgs)-200:]
+	}
 	m.mu.Unlock()
 	return nil
 }
