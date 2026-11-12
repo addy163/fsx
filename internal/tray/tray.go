@@ -6,4 +6,5 @@ type Options struct {
 	URL      string
 	PairCode string
 	NodeID   string
+	Home     string
 }

@@ -302,6 +302,8 @@ func Quit() {
 	}
 }
 
+func NotifyExisting(home string) bool { return false }
+
 func wndProc(hwnd syscall.Handle, uMsg uint32, wParam, lParam uintptr) uintptr {
 	switch uMsg {
 	case wmTray:

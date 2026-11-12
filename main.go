@@ -30,6 +30,10 @@ const version = "0.2.0"
 
 func main() {
 	log.SetFlags(log.Ltime)
+	// AppKit/Win32 的消息循环必须留在主线程；main goroutine 起始即主线程，尽早锁定。
+	if tray.Supported() {
+		runtime.LockOSThread()
+	}
 	args := os.Args[1:]
 	cmd := "serve"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -214,11 +218,17 @@ func cmdServe(args []string) {
 	}
 	cfg := applyOpts(st, o)
 
-	// 托盘模式下重复双击 exe：直接把已在运行的节点控制台打开
+	// 托盘模式下重复双击：mac 用 home 内的 socket 通知已有实例弹窗；
+	// Windows 没有 socket 单实例，回落到探测本机控制台端口。
 	if useTray {
-		if port, ok := runningInstance(cfg.HTTPPort); ok {
-			openBrowser(fmt.Sprintf("http://127.0.0.1:%d", port))
+		if tray.NotifyExisting(home) {
 			return
+		}
+		if runtime.GOOS == "windows" {
+			if port, ok := runningInstance(cfg.HTTPPort); ok {
+				openBrowser(fmt.Sprintf("http://127.0.0.1:%d", port))
+				return
+			}
 		}
 	}
 
@@ -301,7 +311,7 @@ func cmdServe(args []string) {
 			tray.Quit()
 		}()
 		if err := tray.Run(tray.Options{
-			Name: cfg.Name, URL: url, PairCode: code, NodeID: id.ID,
+			Name: cfg.Name, URL: url, PairCode: code, NodeID: id.ID, Home: home,
 		}); err != nil {
 			log.Printf("托盘客户端退出: %v", err)
 			tray.ShowConsole()
