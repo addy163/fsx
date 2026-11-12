@@ -1226,8 +1226,13 @@ function render() {
   setText($("#dlDir"), self.download_dir || "—");
   setText($("#sbPorts"), self.p2p_port ? `P2P :${self.p2p_port} · 控制台 :${self.http_port}` : "—");
   const v6 = self.v6 || [];
-  setText($("#sbV6"), v6.length ? `IPv6 就绪 · ${v6.length} 个全局地址` : "IPv6 无全局地址");
-  $("#sbV6").title = v6.join("\n");
+  const v6Ready = v6.length > 0 && !!self.p2p_port;
+  setText($("#sbV6Text"), v6.length ? `IPv6 就绪 · ${v6.length} 个全局地址` : "IPv6 无全局地址");
+  $("#sbV6").classList.toggle("off", !v6Ready);
+  $("#sbV6Icon").hidden = !v6Ready;
+  $("#sbV6").title = v6Ready
+    ? `点击复制 IPv6 直连地址 [${v6[0]}]:${self.p2p_port}，发给对方在「添加设备」粘贴即可跨网直连\n${v6.join("\n")}`
+    : (v6.join("\n") || "本机没有全局 IPv6 地址");
 
   const relayText = { online: "中继 已连接", connecting: "中继 连接中", offline: "中继 离线", off: "中继 未配置 · 仅局域网" };
   setText($("#relayText"), relayText[S.relay] || "中继 " + S.relay);
@@ -1256,6 +1261,15 @@ function initEvents() {
   $("#meID").onclick = () => copy(S.self && S.self.id, "已复制完整节点 ID，发给对方即可添加");
   $("#copyCode").onclick = () => copy(S.code, "已复制配对码");
   $("#dlDir").onclick = () => copy(S.self && S.self.download_dir, "已复制接收目录");
+  const copyV6 = () => {
+    const s = S.self || {}, v6 = s.v6 || [];
+    if (!v6.length || !s.p2p_port) { toast("本机没有全局 IPv6 地址", { kind: "info" }); return; }
+    copy(`[${v6[0]}]:${s.p2p_port}`, v6.length > 1
+      ? `已复制 IPv6 直连地址（首个，共 ${v6.length} 个），对方在「添加设备」粘贴即可`
+      : "已复制 IPv6 直连地址，对方在「添加设备」粘贴即可");
+  };
+  $("#sbV6").onclick = copyV6;
+  $("#sbV6").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); copyV6(); } };
 
   $("#peerSearchToggle").onclick = () => {
     const w = $("#peerSearchWrap");
