@@ -1230,9 +1230,8 @@ function render() {
   setText($("#sbV6Text"), v6.length ? `IPv6 就绪 · ${v6.length} 个全局地址` : "IPv6 无全局地址");
   $("#sbV6").classList.toggle("off", !v6Ready);
   $("#sbV6Icon").hidden = !v6Ready;
-  $("#sbV6").title = v6Ready
-    ? `点击复制 IPv6 直连地址 [${v6[0]}]:${self.p2p_port}，发给对方在「添加设备」粘贴即可跨网直连\n${v6.join("\n")}`
-    : (v6.join("\n") || "本机没有全局 IPv6 地址");
+  $("#sbV6").setAttribute("aria-label", v6Ready ? `本机 IPv6 直连地址，共 ${v6.length} 个全局地址，点击复制` : "本机 IPv6 状态");
+  if (!$("#v6pop").hidden) buildV6Pop();
 
   const relayText = { online: "中继 已连接", connecting: "中继 连接中", offline: "中继 离线", off: "中继 未配置 · 仅局域网" };
   setText($("#relayText"), relayText[S.relay] || "中继 " + S.relay);
@@ -1256,6 +1255,45 @@ function render() {
   renderDrawer();
 }
 
+/* ── 本机 IPv6 浮层 ───────────────────────── */
+let v6HideTimer = null;
+function buildV6Pop() {
+  const pop = $("#v6pop");
+  const s = S.self || {}, v6 = s.v6 || [];
+  pop.textContent = "";
+  pop.append(el("div", "v6pop-head micro", v6.length ? `本机 IPv6 · ${v6.length} 个全局地址` : "本机 IPv6"));
+  if (!v6.length) { pop.append(el("div", "v6pop-empty", "本机没有全局 IPv6 地址")); return; }
+  if (s.p2p_port) {
+    const dial = `[${v6[0]}]:${s.p2p_port}`;
+    const row = el("div", "v6pop-row primary");
+    const txt = el("div", "v6pop-txt");
+    txt.append(el("span", "v6pop-label", "直连地址 · 推荐分享"), el("span", "mono", dial));
+    row.append(txt, iconBtn("copy", "复制直连地址", () => copy(dial, "已复制 IPv6 直连地址，对方在「添加设备」粘贴即可"), "xs"));
+    pop.append(row);
+  }
+  for (const a of v6) {
+    const row = el("div", "v6pop-row");
+    row.append(el("span", "mono", a), iconBtn("copy", "复制该地址", () => copy(a, "已复制 IPv6 地址"), "xs"));
+    pop.append(row);
+  }
+  pop.append(el("div", "v6pop-hint", "对方在「添加设备」粘贴直连地址即可跨网直连"));
+}
+function showV6Pop() {
+  cancelHideV6();
+  const pop = $("#v6pop");
+  buildV6Pop();
+  pop.hidden = false;
+  const r = $("#sbV6").getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+  pop.style.bottom = (window.innerHeight - r.top + 8) + "px";
+}
+function hideV6Pop() { $("#v6pop").hidden = true; }
+function scheduleHideV6() {
+  if (v6HideTimer) clearTimeout(v6HideTimer);
+  v6HideTimer = setTimeout(hideV6Pop, 160);
+}
+function cancelHideV6() { if (v6HideTimer) { clearTimeout(v6HideTimer); v6HideTimer = null; } }
+
 /* ── 事件绑定 ─────────────────────────────── */
 function initEvents() {
   $("#meID").onclick = () => copy(S.self && S.self.id, "已复制完整节点 ID，发给对方即可添加");
@@ -1268,8 +1306,20 @@ function initEvents() {
       ? `已复制 IPv6 直连地址（首个，共 ${v6.length} 个），对方在「添加设备」粘贴即可`
       : "已复制 IPv6 直连地址，对方在「添加设备」粘贴即可");
   };
-  $("#sbV6").onclick = copyV6;
-  $("#sbV6").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); copyV6(); } };
+  const v6El = $("#sbV6"), v6Pop = $("#v6pop");
+  v6El.onclick = () => { copyV6(); showV6Pop(); };
+  v6El.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); copyV6(); showV6Pop(); } };
+  v6El.onmouseenter = showV6Pop;
+  v6El.onmouseleave = scheduleHideV6;
+  v6El.onfocus = showV6Pop;
+  v6El.onblur = scheduleHideV6;
+  v6Pop.onmouseenter = cancelHideV6;
+  v6Pop.onmouseleave = scheduleHideV6;
+  v6Pop.onfocusin = cancelHideV6;
+  document.addEventListener("click", (e) => {
+    if (!v6Pop.hidden && !v6Pop.contains(e.target) && !v6El.contains(e.target)) hideV6Pop();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideV6Pop(); });
 
   $("#peerSearchToggle").onclick = () => {
     const w = $("#peerSearchWrap");

@@ -385,6 +385,16 @@ a.iconbtn,a.btn{text-decoration:none}
 .sb-copy:focus-visible{outline:1px solid rgba(76,141,255,.5);outline-offset:2px}
 .sb-copy.off{cursor:default}
 .sb-copy.off:hover{color:inherit;background:transparent}
+.v6pop{position:fixed;z-index:60;display:flex;flex-direction:column;gap:6px;min-width:280px;max-width:min(430px,92vw);max-height:60vh;overflow:auto;padding:10px;border:1px solid var(--line-2);border-radius:var(--r-md);background:linear-gradient(180deg,var(--ink-750),var(--ink-850));box-shadow:var(--shadow-2)}
+.v6pop-head{padding:0 6px 2px}
+.v6pop-row{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:4px 6px;border-radius:7px}
+.v6pop-row:hover{background:rgba(76,141,255,.07)}
+.v6pop-row .mono{font-size:11px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v6pop-row.primary{border:1px solid rgba(76,141,255,.35);background:rgba(76,141,255,.08)}
+.v6pop-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.v6pop-label{font-size:10px;color:var(--beam)}
+.v6pop-hint{font-size:10px;color:var(--muted);padding:2px 6px}
+.v6pop-empty{font-size:11px;color:var(--muted);padding:4px 6px}
 
 /* ── 抽屉 / 弹层 ──────────────────────────── */
 .scrim{position:fixed;inset:0;z-index:40;background:rgba(4,6,10,.6);backdrop-filter:blur(3px);animation:fade .2s both}
