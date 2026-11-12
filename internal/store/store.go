@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// legacyGenericName 是早期版本遗留的通用默认名，跨设备重名易误认成自己。
+const legacyGenericName = "我的电脑"
+
 type Config struct {
 	Name        string   `json:"name"`
 	DownloadDir string   `json:"download_dir"`
@@ -66,6 +69,16 @@ func Open(dir string, defaults Config) (*Store, error) {
 		}
 	case !os.IsNotExist(err):
 		return nil, err
+	}
+
+	// 旧版通用默认名会让局域网里每台机器都叫同一个名字，误认成自己；
+	// 一次性迁移为主机名默认，迁移前保留原配置备份。
+	if s.cfg.Name == legacyGenericName {
+		bak := path + ".bak"
+		if _, e := os.Stat(bak); os.IsNotExist(e) && len(b) > 0 {
+			_ = os.WriteFile(bak, b, 0o600)
+		}
+		s.cfg.Name = defaults.Name
 	}
 
 	if s.cfg.Name == "" {

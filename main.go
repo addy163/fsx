@@ -145,7 +145,8 @@ func hostname() string {
 	if err != nil || h == "" {
 		return "fsx"
 	}
-	return h
+	// 去掉 mDNS 后缀，让默认名就是机器名，跨设备一眼可分辨。
+	return strings.TrimSuffix(h, ".local")
 }
 
 func applyOpts(st *store.Store, o *commonOpts) store.Config {
