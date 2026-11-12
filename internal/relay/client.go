@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"fsx/internal/addrs"
 	"fsx/internal/identity"
 	"fsx/internal/proto"
 )
@@ -35,9 +36,10 @@ const (
 )
 
 type Register struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	P2PPort int    `json:"p2p_port"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	P2PPort int      `json:"p2p_port"`
+	V6      []string `json:"v6,omitempty"`
 }
 
 type Registered struct {
@@ -51,10 +53,11 @@ type Lookup struct {
 }
 
 type Found struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Direct string `json:"direct"`
-	Q      string `json:"q,omitempty"` // 原始查询串，短 ID 查询时用于回调匹配
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Direct string   `json:"direct"`
+	V6     []string `json:"v6,omitempty"`
+	Q      string   `json:"q,omitempty"` // 原始查询串，短 ID 查询时用于回调匹配
 }
 
 type Open struct {
@@ -187,7 +190,7 @@ func (c *Client) connect(ctx context.Context) error {
 		c.onFP(relayID)
 	}
 	pc := proto.New(tc)
-	if err := pc.SendJSON(RRegister, Register{ID: c.id.ID, Name: c.name, P2PPort: c.P2PPort}); err != nil {
+	if err := pc.SendJSON(RRegister, Register{ID: c.id.ID, Name: c.name, P2PPort: c.P2PPort, V6: addrs.GlobalV6()}); err != nil {
 		tc.Close()
 		return err
 	}
@@ -455,6 +458,15 @@ func (c *Client) PublicAddr(peerID string) (string, bool) {
 		return "", false
 	}
 	return f.Direct, true
+}
+
+// PublicV6 返回对方通告的全局 IPv6 地址，供跨网直连尝试。
+func (c *Client) PublicV6(peerID string) ([]string, bool) {
+	f, ok := c.Lookup(peerID)
+	if !ok || len(f.V6) == 0 {
+		return nil, false
+	}
+	return f.V6, true
 }
 
 func (c *Client) waitConn(ctx context.Context, d time.Duration) (*proto.Conn, error) {

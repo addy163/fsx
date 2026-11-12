@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"fsx/internal/addrs"
 	"fsx/internal/discovery"
 	"fsx/internal/identity"
 	"fsx/internal/proto"
@@ -30,6 +31,7 @@ var errCanceled = errors.New("已取消")
 // WAN 由中继客户端实现；没有配置中继时为 nil。
 type WAN interface {
 	PublicAddr(peerID string) (string, bool)
+	PublicV6(peerID string) ([]string, bool)
 	OpenRelay(ctx context.Context, peerID string) (net.Conn, error)
 	Resolve(id string) (peerID, name, direct string, ok bool)
 	Status() string
@@ -187,7 +189,7 @@ func (m *Manager) autoAccept(peerID string) bool {
 }
 
 func (m *Manager) hello() proto.Hello {
-	return proto.Hello{V: proto.Version, ID: m.self.ID, Name: m.st.Config().Name, OS: goos(), Port: m.port}
+	return proto.Hello{V: proto.Version, ID: m.self.ID, Name: m.st.Config().Name, OS: goos(), Port: m.port, V6: addrs.GlobalV6()}
 }
 
 type Injector struct {
@@ -239,7 +241,7 @@ func (m *Manager) HandleConn(raw net.Conn) {
 		return
 	}
 	if host, _, err := net.SplitHostPort(raw.RemoteAddr().String()); err == nil && h.Port > 0 {
-		m.reg.Touch(peerID, h.Name, net.JoinHostPort(host, strconv.Itoa(h.Port)))
+		m.reg.Touch(peerID, h.Name, net.JoinHostPort(host, strconv.Itoa(h.Port)), h.V6)
 	}
 	sas := identity.SAS(cs, m.self.ID, peerID)
 	tc.SetDeadline(time.Time{})
@@ -345,14 +347,41 @@ func (m *Manager) dialPeer(ctx context.Context, peerID, addr string) (*session, 
 		cands = append(cands, cand{a, mode})
 	}
 	add(addr, "lan")
-	if p := m.reg.Get(peerID); p != nil {
+	p := m.reg.Get(peerID)
+	if p != nil {
 		add(p.Addr, "lan")
 	}
-	if m.wan != nil && peerID != "" {
-		if a, ok := m.wan.PublicAddr(peerID); ok {
-			add(a, "direct")
+	// IPv6 通常不做 NAT，全局地址可直通；优先于 IPv4 公网提示尝试。
+	v6Port := ""
+	if p != nil {
+		if _, port, err := net.SplitHostPort(p.Addr); err == nil {
+			v6Port = port
 		}
 	}
+	var v6s []string
+	if p != nil {
+		v6s = append(v6s, p.V6...)
+	}
+	direct := ""
+	if m.wan != nil && peerID != "" {
+		if a, ok := m.wan.PublicAddr(peerID); ok {
+			direct = a
+			if v6Port == "" {
+				if _, port, err := net.SplitHostPort(a); err == nil {
+					v6Port = port
+				}
+			}
+		}
+		if vs, ok := m.wan.PublicV6(peerID); ok {
+			v6s = append(v6s, vs...)
+		}
+	}
+	if v6Port != "" {
+		for _, v6 := range v6s {
+			add(net.JoinHostPort(v6, v6Port), "v6")
+		}
+	}
+	add(direct, "direct")
 	var lastErr error
 	for _, c := range cands {
 		s, err := m.secureDial(ctx, c.addr, peerID)

@@ -93,7 +93,7 @@ function trackClass(s) {
   if (s === "pending" || s === "waiting") return "warn";
   return "";
 }
-function modeLabel(m) { return ({ lan: "局域网", direct: "公网直连", relay: "中继" })[m] || m || ""; }
+function modeLabel(m) { return ({ lan: "局域网", direct: "公网直连", v6: "IPv6 直连", relay: "中继" })[m] || m || ""; }
 function modeClass(m) { return m === "relay" ? "relay" : m ? "ok" : ""; }
 function jobTitle(j) {
   const it = j.items || [];
@@ -918,6 +918,7 @@ function renderDrawer() {
     acts.append(btn("发送文件", "solid sm", "send", () => pickFiles(p)));
     acts.append(btn("发消息", "ghost sm", "chat", () => { closeDrawer(); setTab("messages"); openConversation(p); }));
     if (p.id) acts.append(btn("复制节点 ID", "ghost sm", "copy", () => copy(p.id, "已复制节点 ID")));
+    if ((p.v6 || []).length) acts.append(btn("检测 IPv6 直通", "ghost sm", "bolt", () => probeV6(p)));
     acts.append(btn(UI.target === key ? "取消默认设备" : "设为默认设备", "ghost sm", "check", () => {
       setTarget(UI.target === key ? null : key);
       renderDrawer();
@@ -937,6 +938,7 @@ function renderDrawer() {
     body.replaceChildren(hero, kv([
       ["节点 ID", p.id, true],
       ["地址", p.addr, true],
+      ["IPv6", (p.v6 || []).length ? (p.v6[0] + ((p.v6 || []).length > 1 ? ` 等 ${(p.v6 || []).length} 个` : "")) : "无", true],
       ["状态", p.online ? "在线" : "离线"],
       ["来源", p.manual ? "手动添加" : "局域网发现"],
       ["最近发现", p.last_seen ? fmtStamp(p.last_seen) : "", true],
@@ -1018,6 +1020,14 @@ async function decide(id, accept, always) {
 }
 async function revealJob(id, i) {
   try { await api("/api/reveal", { id, i: i || 0 }); } catch (e) { fail(e); }
+}
+async function probeV6(p) {
+  const port = (p.addr || "").split(":").pop();
+  if (!port || !(p.v6 || []).length) { toast("该设备没有可探测的 IPv6 地址", { kind: "info" }); return; }
+  try {
+    const r = await api("/api/probe", { addr: `[${p.v6[0]}]:${port}` });
+    toast(r.ok ? "IPv6 直通可用，发送时将优先走 IPv6" : "IPv6 不通，将回落局域网/中继", { kind: r.ok ? "ok" : "info" });
+  } catch (e) { fail(e); }
 }
 async function cancelJob(id) {
   try { await api("/api/cancel", { id }); toast("已取消传输"); } catch (e) { fail(e); }
@@ -1215,6 +1225,9 @@ function render() {
   paintAvatar($("#meAvatar"), self.id, self.name || "fsx");
   setText($("#dlDir"), self.download_dir || "—");
   setText($("#sbPorts"), self.p2p_port ? `P2P :${self.p2p_port} · 控制台 :${self.http_port}` : "—");
+  const v6 = self.v6 || [];
+  setText($("#sbV6"), v6.length ? `IPv6 就绪 · ${v6.length} 个全局地址` : "IPv6 无全局地址");
+  $("#sbV6").title = v6.join("\n");
 
   const relayText = { online: "中继 已连接", connecting: "中继 连接中", offline: "中继 离线", off: "中继 未配置 · 仅局域网" };
   setText($("#relayText"), relayText[S.relay] || "中继 " + S.relay);

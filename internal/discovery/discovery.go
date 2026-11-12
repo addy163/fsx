@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"fsx/internal/addrs"
 )
 
 const (
@@ -18,12 +20,13 @@ const (
 )
 
 type Peer struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Addr     string `json:"addr"`
-	Online   bool   `json:"online"`
-	Manual   bool   `json:"manual"`
-	LastSeen int64  `json:"last_seen"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Addr     string   `json:"addr"`
+	V6       []string `json:"v6,omitempty"`
+	Online   bool     `json:"online"`
+	Manual   bool     `json:"manual"`
+	LastSeen int64    `json:"last_seen"`
 }
 
 type Registry struct {
@@ -35,7 +38,7 @@ func NewRegistry() *Registry {
 	return &Registry{peers: map[string]*Peer{}}
 }
 
-func (r *Registry) Touch(id, name, addr string) {
+func (r *Registry) Touch(id, name, addr string, v6 []string) {
 	if id == "" {
 		return
 	}
@@ -51,6 +54,7 @@ func (r *Registry) Touch(id, name, addr string) {
 	if p.Addr == "" || !(linkLocal(addr) && !linkLocal(p.Addr)) {
 		p.Addr = addr
 	}
+	p.V6 = append([]string(nil), v6...)
 	p.LastSeen = time.Now().Unix()
 	p.Online = true
 }
@@ -163,12 +167,13 @@ func (r *Registry) List() []Peer {
 }
 
 type Beacon struct {
-	V    int    `json:"v"`
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Port int    `json:"port"`
-	OS   string `json:"os"`
-	TS   int64  `json:"ts"`
+	V    int      `json:"v"`
+	ID   string   `json:"id"`
+	Name string   `json:"name"`
+	Port int      `json:"port"`
+	OS   string   `json:"os"`
+	V6   []string `json:"v6,omitempty"`
+	TS   int64    `json:"ts"`
 }
 
 // Run 启动发现：一个组播接收循环 + 一个定时组播/广播发送循环。
@@ -207,7 +212,7 @@ func listen(ctx context.Context, port int, selfID string, reg *Registry) {
 		if ip.IsUnspecified() {
 			continue
 		}
-		reg.Touch(b.ID, b.Name, net.JoinHostPort(ip.String(), strconv.Itoa(b.Port)))
+		reg.Touch(b.ID, b.Name, net.JoinHostPort(ip.String(), strconv.Itoa(b.Port)), b.V6)
 	}
 }
 
@@ -217,7 +222,7 @@ func send(ctx context.Context, port int, id, name string, p2pPort int) {
 	beacon := func() []byte {
 		b, _ := json.Marshal(Beacon{
 			V: 1, ID: id, Name: name, Port: p2pPort,
-			OS: runtime.GOOS, TS: time.Now().Unix(),
+			OS: runtime.GOOS, V6: addrs.GlobalV6(), TS: time.Now().Unix(),
 		})
 		return b
 	}

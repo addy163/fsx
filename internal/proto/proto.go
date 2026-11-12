@@ -35,11 +35,12 @@ const (
 )
 
 type Hello struct {
-	V    int    `json:"v"`
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	OS   string `json:"os"`
-	Port int    `json:"port"`
+	V    int      `json:"v"`
+	ID   string   `json:"id"`
+	Name string   `json:"name"`
+	OS   string   `json:"os"`
+	Port int      `json:"port"`
+	V6   []string `json:"v6,omitempty"`
 }
 
 type Item struct {

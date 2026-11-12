@@ -20,6 +20,7 @@ type sclient struct {
 	name string
 	addr string
 	port int
+	v6   []string
 	conn *proto.Conn
 }
 
@@ -82,7 +83,7 @@ func (s *Server) handle(raw net.Conn) {
 	if reg.P2PPort > 0 {
 		direct = net.JoinHostPort(host, strconv.Itoa(reg.P2PPort))
 	}
-	cl := &sclient{id: peerID, name: reg.Name, addr: addr, port: reg.P2PPort, conn: pc}
+	cl := &sclient{id: peerID, name: reg.Name, addr: addr, port: reg.P2PPort, v6: reg.V6, conn: pc}
 
 	s.mu.Lock()
 	if old := s.clients[peerID]; old != nil {
@@ -129,7 +130,7 @@ func (s *Server) handle(raw net.Conn) {
 			var f Found
 			if target != nil {
 				thost, _, _ := net.SplitHostPort(target.addr)
-				f = Found{ID: target.id, Name: target.name, Q: lk.ID}
+				f = Found{ID: target.id, Name: target.name, Q: lk.ID, V6: target.v6}
 				if target.port > 0 {
 					f.Direct = net.JoinHostPort(thost, strconv.Itoa(target.port))
 				}

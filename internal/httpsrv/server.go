@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"fsx/internal/addrs"
 	"fsx/internal/identity"
 	"fsx/internal/store"
 	"fsx/internal/transfer"
@@ -58,6 +59,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/upload", s.guard(s.upload))
 	mux.Handle("GET /dl/{id}", s.guard(s.download))
 	mux.Handle("POST /api/reveal", s.guard(s.reveal))
+	mux.Handle("POST /api/probe", s.guard(s.probe))
 	mux.Handle("GET /api/history", s.guard(s.history))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-FSX-Server", "fsx")
@@ -238,7 +240,7 @@ func (s *Server) buildState(r *http.Request) map[string]any {
 	self := map[string]any{
 		"id": s.id.ID, "short": identity.Short(s.id.ID), "name": cfg.Name,
 		"version": s.version, "http_port": s.http, "p2p_port": s.p2p,
-		"download_dir": cfg.DownloadDir, "lan": localIP(),
+		"download_dir": cfg.DownloadDir, "lan": localIP(), "v6": addrs.GlobalV6(),
 	}
 	out := map[string]any{
 		"self": self, "peers": snap.Peers, "jobs": snap.Jobs,
@@ -588,6 +590,24 @@ func revealPath(path string) error {
 	default:
 		return exec.Command("xdg-open", filepath.Dir(path)).Run()
 	}
+}
+
+// probe 做一次短超时 TCP 连通性探测，供界面「检测 IPv6 直通」使用。
+func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Addr string `json:"addr"`
+	}
+	if err := readJSON(r, &req); err != nil || req.Addr == "" {
+		writeJSON(w, 400, map[string]string{"error": "缺少地址"})
+		return
+	}
+	c, err := net.DialTimeout("tcp", req.Addr, 2*time.Second)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"ok": false})
+		return
+	}
+	c.Close()
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
