@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/peer", s.guard(s.addPeer))
 	mux.Handle("POST /api/upload", s.guard(s.upload))
 	mux.Handle("GET /dl/{id}", s.guard(s.download))
+	mux.Handle("POST /api/reveal", s.guard(s.reveal))
 	mux.Handle("GET /api/history", s.guard(s.history))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-FSX-Server", "fsx")
@@ -240,6 +243,7 @@ func (s *Server) buildState(r *http.Request) map[string]any {
 	out := map[string]any{
 		"self": self, "peers": snap.Peers, "jobs": snap.Jobs,
 		"messages": snap.Messages, "relay": snap.Relay,
+		"local": isLoopback(r),
 	}
 	if isLoopback(r) {
 		out["code"] = s.code
@@ -532,6 +536,58 @@ func serveFile(w http.ResponseWriter, r *http.Request, path string) {
 
 func setDownloadName(w http.ResponseWriter, name string) {
 	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(name))
+}
+
+func (s *Server) reveal(w http.ResponseWriter, r *http.Request) {
+	// 打开的是节点本机的文件管理器；远程控制台调用只会开在节点上，故禁止。
+	if !isLoopback(r) {
+		writeJSON(w, 403, map[string]string{"error": "仅本机控制台可打开文件夹"})
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+		I  int    `json:"i"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, errBody(err))
+		return
+	}
+	j := s.m.FindJob(req.ID)
+	if j == nil || j.Dir != "recv" {
+		writeJSON(w, 404, map[string]string{"error": "任务不存在"})
+		return
+	}
+	var files []string
+	for _, it := range j.Items {
+		if it.Finalized {
+			files = append(files, it.FinalPath)
+		}
+	}
+	if len(files) == 0 {
+		writeJSON(w, 409, map[string]string{"error": "文件尚未接收完成"})
+		return
+	}
+	if req.I < 0 || req.I >= len(files) {
+		writeJSON(w, 400, map[string]string{"error": "索引越界"})
+		return
+	}
+	if err := revealPath(files[req.I]); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "打开文件夹失败: " + err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"ok": "1"})
+}
+
+func revealPath(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-R", path).Run()
+	case "windows":
+		// explorer 即使成功也常返回非零退出码，故只启动不等待。
+		return exec.Command("explorer", "/select,"+path).Start()
+	default:
+		return exec.Command("xdg-open", filepath.Dir(path)).Run()
+	}
 }
 
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {

@@ -502,13 +502,17 @@ function updateJob(n, j) {
   if (j.mode) acts.append(el("span", "badge " + modeClass(j.mode), modeLabel(j.mode)));
   if (live) acts.append(iconBtn("stop", "取消传输", () => cancelJob(j.id), "sm"));
   if (j.state === "done" && j.dir === "recv") {
-    const a = el("a", "iconbtn sm");
-    a.href = "/dl/" + j.id;
-    a.title = (j.items || []).length > 1 ? "打包下载" : "下载";
-    a.setAttribute("aria-label", a.title);
-    a.append(icon("download"));
-    a.onclick = (e) => e.stopPropagation();
-    acts.append(a);
+    if (S.local) {
+      acts.append(iconBtn("folder", "打开文件所在文件夹", () => revealJob(j.id), "sm"));
+    } else {
+      const a = el("a", "iconbtn sm");
+      a.href = "/dl/" + j.id;
+      a.title = (j.items || []).length > 1 ? "打包下载" : "下载";
+      a.setAttribute("aria-label", a.title);
+      a.append(icon("download"));
+      a.onclick = (e) => e.stopPropagation();
+      acts.append(a);
+    }
   }
   acts.append(iconBtn("info", "查看详情", () => openDrawer("job", j.id), "sm"));
 }
@@ -573,7 +577,9 @@ function renderInbox() {
   js = js.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
   if (!js.length) {
     box.replaceChildren(emptyState("folder", q ? "没有匹配的文件" : "收件箱是空的",
-      q ? "换个关键词试试。" : "别人发来的文件会保存在接收目录，也会在这里列出，可直接下载。"));
+      q ? "换个关键词试试。" : S.local
+        ? "别人发来的文件会保存在接收目录，也会在这里列出，可直接打开所在文件夹。"
+        : "别人发来的文件会保存在接收目录，也会在这里列出，可直接下载。"));
     return;
   }
   syncList(box, js, (j) => j.id, inboxRow, updateInbox);
@@ -611,7 +617,9 @@ function updateInbox(n, j) {
     a.onclick = (e) => e.stopPropagation();
     return a;
   };
-  if (items.length > 1) {
+  if (S.local) {
+    acts.append(iconBtn("folder", "打开文件所在文件夹", () => revealJob(j.id), "sm"));
+  } else if (items.length > 1) {
     acts.append(link("/dl/" + j.id, "打包下载 ZIP", "folder"));
     acts.append(link("/dl/" + j.id + "?i=0", "下载第一个文件", "download"));
   } else {
@@ -861,10 +869,14 @@ function renderDrawer() {
       acts.append(btn("拒绝", "ghost sm", "x", () => decide(j.id, false, false)));
     }
     if (j.state === "done" && j.dir === "recv") {
-      const a = el("a", "btn solid sm");
-      a.href = "/dl/" + j.id;
-      a.append(icon("download"), document.createTextNode(items.length > 1 ? "打包下载" : "下载文件"));
-      acts.append(a);
+      if (S.local) {
+        acts.append(btn("打开文件所在文件夹", "solid sm", "folder", () => revealJob(j.id)));
+      } else {
+        const a = el("a", "btn solid sm");
+        a.href = "/dl/" + j.id;
+        a.append(icon("download"), document.createTextNode(items.length > 1 ? "打包下载" : "下载文件"));
+        acts.append(a);
+      }
     }
     acts.append(btn("复制任务 ID", "ghost sm", "copy", () => copy(j.id, "已复制任务 ID")));
     const sec = el("div", "dt-section");
@@ -1003,6 +1015,9 @@ async function decide(id, accept, always) {
     await api("/api/decision", { id, accept, always: !!always });
     toast(accept ? "已接收，开始传输" : "已拒绝", { kind: accept ? "ok" : "info" });
   } catch (e) { fail(e); }
+}
+async function revealJob(id, i) {
+  try { await api("/api/reveal", { id, i: i || 0 }); } catch (e) { fail(e); }
 }
 async function cancelJob(id) {
   try { await api("/api/cancel", { id }); toast("已取消传输"); } catch (e) { fail(e); }
