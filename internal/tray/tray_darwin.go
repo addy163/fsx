@@ -91,6 +91,14 @@ package tray
 - (BOOL)windowShouldClose:(NSWindow *)w { [w orderOut:nil]; return NO; }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app { return NO; }
 
+// 已有实例在跑时双击 .app，LaunchServices 只向旧进程发 reopen 事件、不新起进程；
+// 不处理该事件就表现为「双击没反应」。
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+	NSLog(@"[fsx] 收到 reopen（双击/再次打开），显示主窗口");
+	[self showWindow];
+	return YES;
+}
+
 - (void)webView:(WKWebView *)wv didFinishNavigation:(WKNavigation *)nav {
 	NSLog(@"[fsx] 控制台已加载 %@", wv.URL.absoluteString);
 }
