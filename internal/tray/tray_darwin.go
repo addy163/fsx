@@ -189,6 +189,9 @@ func HideConsole() {}
 
 func ShowConsole() {}
 
+// OpenAppWindow 在 mac 上不使用（已有 WKWebView 原生窗口），恒返回 false。
+func OpenAppWindow(url string) bool { return false }
+
 func SetupLog(dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err

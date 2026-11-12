@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -427,11 +428,55 @@ func removeIcon() {
 	}
 }
 
+// appBrowserCandidates 按优先级列出可用于「应用窗口」模式的浏览器路径：
+// 先 Edge（Win10/11 默认自带）后 Chrome，仅探测标准安装目录，零第三方依赖。
+func appBrowserCandidates() []string {
+	var dirs []string
+	for _, env := range []string{"ProgramFiles(x86)", "ProgramFiles", "LocalAppData"} {
+		if v := os.Getenv(env); v != "" {
+			dirs = append(dirs, v)
+		}
+	}
+	var out []string
+	for _, d := range dirs {
+		out = append(out, filepath.Join(d, "Microsoft", "Edge", "Application", "msedge.exe"))
+	}
+	for _, d := range dirs {
+		out = append(out, filepath.Join(d, "Google", "Chrome", "Application", "chrome.exe"))
+	}
+	return out
+}
+
+// OpenAppWindow 用 Edge/Chrome 的 --app 模式打开无地址栏、无标签的独立窗口，
+// 观感接近原生软件窗口（与 mac 内嵌窗口一致，尺寸 1280x860）。
+// 成功返回 true；找不到浏览器或启动失败返回 false，由调用方回落默认浏览器。
+func OpenAppWindow(url string) bool {
+	if url == "" {
+		return false
+	}
+	for _, exe := range appBrowserCandidates() {
+		if st, err := os.Stat(exe); err != nil || st.IsDir() {
+			continue
+		}
+		cmd := exec.Command(exe, "--app="+url, "--window-size=1280,860")
+		if err := cmd.Start(); err != nil {
+			log.Printf("[控制台] 应用窗口启动失败 %s: %v", exe, err)
+			continue
+		}
+		log.Printf("[控制台] 以应用窗口打开 %s（%s）", url, filepath.Base(exe))
+		return true
+	}
+	return false
+}
+
 func openConsole() {
 	trayMu.Lock()
 	url := trayOpts.URL
 	trayMu.Unlock()
 	if url == "" {
+		return
+	}
+	if OpenAppWindow(url) {
 		return
 	}
 	verb, _ := syscall.UTF16PtrFromString("open")
