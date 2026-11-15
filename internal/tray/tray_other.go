@@ -12,6 +12,8 @@ func ShowConsole() {}
 
 func OpenAppWindow(url string) bool { return false }
 
+func Notify(title, body string) {}
+
 func SetupLog(dir string) (func(), error) { return func() {}, nil }
 
 func Error(title, text string) {}

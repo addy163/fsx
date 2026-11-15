@@ -166,8 +166,10 @@ static void fsx_alert(const char *title, const char *msg) {
 import "C"
 
 import (
+	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -210,6 +212,20 @@ func Error(title, text string) {
 	defer C.free(unsafe.Pointer(ct))
 	defer C.free(unsafe.Pointer(cm))
 	C.fsx_alert(ct, cm)
+}
+
+// Notify 走系统通知中心。.app 内的 osascript 无法声明自己的通知身份，
+// 通知可能显示为「脚本编辑器」，但提示音与横幅仍会送达；失败则静默。
+func Notify(title, body string) {
+	go func() {
+		script := fmt.Sprintf(`display notification "%s" with title "%s"`, appleScriptString(body), appleScriptString(title))
+		exec.Command("osascript", "-e", script).Run()
+	}()
+}
+
+func appleScriptString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	return strings.ReplaceAll(s, "\"", "\\\"")
 }
 
 func sockPath(home string) string { return filepath.Join(home, "fsx.app.sock") }

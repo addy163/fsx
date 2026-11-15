@@ -264,6 +264,9 @@ func cmdServe(args []string) {
 	mgr := transfer.New(id, reg, st, wan, p2pPort)
 	mgr.SetAcceptAll(o.acceptAll)
 	mgr.SetForceRelay(o.forceRelay)
+	if useTray {
+		mgr.SetNotifier(tray.Notify)
+	}
 	go mgr.ServeListener(ln)
 	go inj.Serve(mgr)
 

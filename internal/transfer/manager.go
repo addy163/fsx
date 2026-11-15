@@ -123,6 +123,7 @@ type Manager struct {
 	msgs       []Message
 	acceptAll  bool
 	forceRelay bool
+	notify     func(title, body string)
 }
 
 func New(self *identity.Identity, reg *discovery.Registry, st *store.Store, wan WAN, port int) *Manager {
@@ -179,6 +180,22 @@ func (m *Manager) SetForceRelay(v bool) {
 	m.mu.Lock()
 	m.forceRelay = v
 	m.mu.Unlock()
+}
+
+// SetNotifier 注入系统通知；为 nil 时关闭通知（CLI 等无界面场景）。
+func (m *Manager) SetNotifier(fn func(title, body string)) {
+	m.mu.Lock()
+	m.notify = fn
+	m.mu.Unlock()
+}
+
+func (m *Manager) push(title, body string) {
+	m.mu.Lock()
+	fn := m.notify
+	m.mu.Unlock()
+	if fn != nil {
+		fn(title, body)
+	}
 }
 
 func (m *Manager) autoAccept(peerID string) bool {
@@ -630,6 +647,11 @@ func (m *Manager) recvText(pc *proto.Conn, peerID, peerName string, n int) {
 		m.msgs = m.msgs[len(m.msgs)-200:]
 	}
 	m.mu.Unlock()
+	title := "收到消息"
+	if peerName != "" {
+		title += " · " + peerName
+	}
+	m.push(title, clip(t.Body, 120))
 	pc.SendJSON(proto.TResult, proto.Result{OK: true})
 }
 
@@ -836,4 +858,13 @@ func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func clip(s string, n int) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
 }

@@ -428,6 +428,25 @@ func removeIcon() {
 	}
 }
 
+// Notify 用托盘图标弹出系统气泡；托盘图标尚未建立时静默忽略。
+func Notify(title, body string) {
+	trayMu.Lock()
+	hwnd, icon := trayHWnd, trayIcon
+	trayMu.Unlock()
+	if hwnd == 0 || icon == 0 {
+		return
+	}
+	var nid notifyIconData
+	nid.CbSize = uint32(unsafe.Sizeof(nid))
+	nid.HWnd = hwnd
+	nid.UID = trayIconID
+	nid.UFlags = nifInfo
+	nid.DwInfoFlags = niifInfo
+	copyUTF16(nid.SzInfoTitle[:], title)
+	copyUTF16(nid.SzInfo[:], body)
+	pShellNotifyIconW.Call(nimModify, uintptr(unsafe.Pointer(&nid)))
+}
+
 // appBrowserCandidates 按优先级列出可用于「应用窗口」模式的浏览器路径：
 // 先 Edge（Win10/11 默认自带）后 Chrome，仅探测标准安装目录，零第三方依赖。
 func appBrowserCandidates() []string {

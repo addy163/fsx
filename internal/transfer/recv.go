@@ -42,6 +42,11 @@ func (m *Manager) recvOffer(pc *proto.Conn, peerID, peerName, sas string, n int)
 		j.Total += it.Size
 	}
 	m.addJob(j)
+	who := peerName
+	if who == "" {
+		who = "对方"
+	}
+	m.push("收到文件传输请求", fmt.Sprintf("%s 发来 %d 个文件，打开控制台查看", who, len(j.Items)))
 
 	if !m.autoAccept(peerID) {
 		// 发送方在确认前断开（例如取消）时，读取会立即返回错误。
