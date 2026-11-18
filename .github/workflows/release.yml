@@ -1,0 +1,116 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布标签，例如 v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CGO_ENABLED: "0"
+  GOFLAGS: "-trimpath"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build Windows binaries
+        shell: bash
+        run: |
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/fsx-windows-amd64.exe .
+          GOOS=windows GOARCH=arm64 go build -ldflags "-s -w" -o dist/fsx-windows-arm64.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/fsx-windows-*.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build Linux binaries
+        run: |
+          mkdir -p dist
+          for arch in amd64 arm64 arm; do
+            GOOS=linux GOARCH=$arch go build -ldflags "-s -w" -o "dist/fsx-linux-$arch" .
+            tar -czf "dist/fsx-linux-$arch.tar.gz" -C dist "fsx-linux-$arch"
+            rm "dist/fsx-linux-$arch"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/fsx-linux-*.tar.gz
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build macOS binaries and app bundles
+        run: |
+          mkdir -p dist
+          for arch in arm64 amd64; do
+            GOOS=darwin GOARCH=$arch go build -ldflags "-s -w" -o "dist/fsx-darwin-$arch" .
+            tar -czf "dist/fsx-darwin-$arch.tar.gz" -C dist "fsx-darwin-$arch"
+            rm "dist/fsx-darwin-$arch"
+
+            app="dist/fsx-darwin-$arch.app"
+            mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+            cp internal/tray/darwin/Info.plist "$app/Contents/Info.plist"
+            cp internal/tray/darwin/fsx.icns "$app/Contents/Resources/fsx.icns"
+            CGO_ENABLED=1 GOOS=darwin GOARCH=$arch go build -ldflags "-s -w" -o "$app/Contents/MacOS/fsx" .
+            codesign --force --deep --sign - "$app"
+            ditto -c -k --keepParent "$app" "$app.zip"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist/fsx-darwin-*.tar.gz
+            dist/fsx-darwin-*.app.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: rel
+          merge-multiple: true
+      - name: Generate checksums
+        run: cd rel && sha256sum * > SHA256SUMS
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" rel/* --clobber
+          else
+            gh release create "$TAG" rel/* --title "fsx $TAG" --notes-file .github/release-notes.md
+          fi

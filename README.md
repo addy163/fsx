@@ -10,6 +10,16 @@
 - **桌面集成**：Windows 托盘 + 系统气泡通知；macOS 菜单栏 `.app` + 原生窗口
 - **浏览器接收**：手机等其他设备打开控制台地址，输入 6 位配对码即可收发
 
+## 下载
+
+预编译版本见 [Releases](https://github.com/addy163/fsx/releases/latest)：
+
+- Windows：`fsx-windows-amd64.exe` / `fsx-windows-arm64.exe`
+- macOS 13+：`fsx-darwin-arm64.app.zip`（Apple 芯片）或 `fsx-darwin-amd64.app.zip`（Intel）
+- Linux：`fsx-linux-amd64.tar.gz` / `fsx-linux-arm64.tar.gz` / `fsx-linux-arm.tar.gz`
+
+每个 Release 附带 `SHA256SUMS` 校验文件。推送 `v*` 标签会触发 GitHub Actions 自动构建并发布。
+
 ## 快速开始
 
 要求 Go 1.22 或更高版本。
