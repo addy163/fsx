@@ -448,9 +448,11 @@ function jobRow(j) {
   top.append(dir, el("span", "j-name"), el("span", "badge st"));
   const meta = el("div", "j-meta");
   meta.append(el("span", "who"), el("span", "sep", "·"), el("span", "mono sz"));
+  const sas = el("div", "j-sas");
+  sas.append(el("span", "mono"), el("span", "j-sas-note", "告诉对方这 6 位数字，一致再确认"));
   const track = el("div", "track");
   track.append(el("i"));
-  body.append(top, meta, track);
+  body.append(top, meta, sas, track);
   const right = el("div", "j-right");
   right.append(el("span", "j-pct"), el("div", "j-acts"));
   n.append(ft, body, right);
@@ -475,6 +477,10 @@ function updateJob(n, j) {
   st.className = "badge st " + stateClass(j.state);
   setText(st, stateLabel(j.state));
   setText($(".who", n), (j.dir === "recv" ? "来自 " : "发给 ") + jobPeer(j));
+  const sas = $(".j-sas", n);
+  const hasSas = j.state === "waiting" && !!j.sas;
+  sas.hidden = !hasSas;
+  if (hasSas) setText($(".mono", sas), "核对码 " + j.sas);
 
   let info;
   if (j.state === "failed") info = j.error || "未知错误";
@@ -527,8 +533,7 @@ function askCard(j) {
   const body = el("div", "ask-body");
   const sas = el("div", "sas");
   sas.append(el("span", "sas-code"), el("span", "sas-note", "与发送方核对这 6 位数字一致再接收，可确认连接没有被中间人替换。"));
-  const files = el("div", "filelist scroll");
-  body.append(sas, files);
+  body.append(sas);
   const foot = el("div", "ask-foot");
   const trust = el("label", "trust");
   const cb = el("input");
@@ -538,7 +543,10 @@ function askCard(j) {
   foot.append(trust, el("span", "spacer"));
   foot.append(btn("接收", "ok sm", "check", () => decide(j.id, true, cb.checked)));
   foot.append(btn("拒绝", "ghost sm", "x", () => decide(j.id, false, false)));
-  n.append(head, body, foot);
+  const files = el("div", "filelist scroll");
+  const list = el("div", "ask-list");
+  list.append(files);
+  n.append(head, body, foot, list);
   updateAsk(n, j);
   return n;
 }
